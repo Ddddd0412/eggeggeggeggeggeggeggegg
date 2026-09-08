@@ -1,2 +1,16 @@
-# eggeggeggeggeggeggeggegg
-本项目面向课程小组协作场景，解决会议讨论后任务容易遗漏、负责人不明确和进度难追踪的问题。成员录入会议纪要后，系统调用大语言模型提取任务名称、负责人、截止时间、优先级及原文依据，生成待确认的任务草稿；经组长修改确认后，任务进入看板，组员可以更新任务进度，系统同步展示完成率和逾期情况。项目通过“AI提取—人工确认—任务跟踪”的流程，提高课程小组的协作效率。
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
