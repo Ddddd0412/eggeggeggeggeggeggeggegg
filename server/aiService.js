@@ -138,8 +138,10 @@ function findDateText(text) {
 function shouldIgnoreAsTask(text) {
   const value = String(text || '').trim();
   if (/可能|考虑|建议|之后再商量|以后再说|暂不决定/.test(value)) return true;
+  if (/最好有人|有空的话|方便的话/.test(value)) return true;
   if (/不用|无需|不需要|取消/.test(value)) return true;
   if (/(已经|已).*(完成|结束|提交|处理)/.test(value)) return true;
+  if (/没有.*(?:任务|行动项|工作安排)|仅(?:同步|介绍|回顾)/.test(value)) return true;
   if (/^(?:大家|全体成员|全员)?(?:尽快|继续|认真)?(?:完善|优化)(?:一下)?(?:系统|项目)?$/.test(value)) return true;
   return false;
 }
@@ -189,7 +191,10 @@ function extractLocally(context) {
   const rawTasks = [];
 
   for (const sentence of sentences) {
-    const pieces = sentence.split(/[，,]+/).map((item) => item.trim()).filter(Boolean);
+    const isConditional = /如果.+[，,].*(?:就|则)/.test(sentence);
+    const pieces = (isConditional ? [sentence] : sentence.split(/[，,]+/))
+      .map((item) => item.trim())
+      .filter(Boolean);
     let sharedDateText = null;
     if (pieces.length > 1 && findDateText(pieces[0]) && !memberNames.some((name) => pieces[0].includes(name))) {
       sharedDateText = findDateText(pieces.shift());
@@ -197,20 +202,24 @@ function extractLocally(context) {
 
     for (const piece of pieces) {
       if (shouldIgnoreAsTask(piece)) continue;
-      const mentioned = context.members.find((member) => piece.includes(member.name));
+      const mentionedMembers = context.members.filter((member) => piece.includes(member.name));
+      const mentioned = mentionedMembers.length === 1 ? mentionedMembers[0] : null;
       const groupAssignee = /大家|全体成员|全员/.test(piece);
       const ownDateText = findDateText(piece);
       const dueDateText = ownDateText || sharedDateText;
       const title = cleanTaskTitle(piece, memberNames);
       if (!title || title.length < 2) continue;
       const ambiguity = [];
+      if (mentionedMembers.length > 1) ambiguity.push('包含多名负责人，需由组长拆分或指定单一负责人');
       if (groupAssignee) ambiguity.push('“全体成员”需由组长拆分或指定负责人');
-      if (!mentioned && !groupAssignee) ambiguity.push('负责人不明确');
+      if (!mentioned && !groupAssignee && mentionedMembers.length < 2) ambiguity.push('负责人不明确');
       if (!dueDateText) ambiguity.push('截止时间不明确');
 
       rawTasks.push({
         title,
-        assignee: mentioned?.name || (groupAssignee ? '全体成员' : ''),
+        assignee: mentioned?.name || (mentionedMembers.length > 1
+          ? mentionedMembers.map((member) => member.name).join('、')
+          : (groupAssignee ? '全体成员' : '')),
         due_date_text: dueDateText,
         due_date: resolveDueDate(dueDateText, context.meetingDate),
         priority: normalizePriority(null, piece),
