@@ -6,4 +6,4 @@ data/*.sqlite-*
 coverage/
 *.log
 .DS_Store
-
+deliverables/.build/

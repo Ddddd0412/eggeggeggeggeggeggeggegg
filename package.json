@@ -10,6 +10,7 @@
     "db:migrate": "node server/scripts/migrate.js",
     "db:seed": "node server/scripts/seed.js",
     "db:setup": "npm run db:migrate && npm run db:seed",
+    "test": "npm run test:backend",
     "test:backend": "node --test server/tests/*.test.js",
     "build": "vite build",
     "preview": "vite preview"
