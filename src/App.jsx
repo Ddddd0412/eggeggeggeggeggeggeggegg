@@ -10,7 +10,9 @@ import Statistics from './pages/Statistics';
 
 function getCurrentUser() {
   try {
-    return JSON.parse(localStorage.getItem('currentUser'));
+    const token = localStorage.getItem('authToken');
+    const user = JSON.parse(localStorage.getItem('currentUser'));
+    return token && user ? user : null;
   } catch {
     return null;
   }
@@ -19,6 +21,7 @@ function getCurrentUser() {
 function ProtectedRoute() {
   const currentUser = getCurrentUser();
   if (!currentUser) return <Navigate to="/login" replace />;
+
   return (
     <div className="app-shell">
       <Navbar currentUser={currentUser} />
