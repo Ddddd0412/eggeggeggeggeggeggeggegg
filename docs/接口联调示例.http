@@ -1,0 +1,98 @@
+@baseUrl = http://localhost:3001
+@token = 登录后把响应中的token粘贴到这里
+@meetingId = 1
+@draftId = 1
+@taskId = 1
+
+### 健康检查
+GET {{baseUrl}}/api/health
+
+### 组长登录
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "zhangsan@example.com",
+  "password": "123456"
+}
+
+### 当前用户
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### 团队成员
+GET {{baseUrl}}/api/team/members
+Authorization: Bearer {{token}}
+
+### 新建会议
+POST {{baseUrl}}/api/meetings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "接口联调会议",
+  "date": "2026-09-08",
+  "content": "下周三前，小王整理实验数据，小李完成展示PPT，大家周五讨论测试结果。"
+}
+
+### AI 提取（把上一步响应ID填入 meetingId）
+POST {{baseUrl}}/api/ai/extract
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "meetingId": {{meetingId}}
+}
+
+### 查询最近草稿
+GET {{baseUrl}}/api/ai/drafts?meetingId={{meetingId}}
+Authorization: Bearer {{token}}
+
+### 人工修正草稿
+PATCH {{baseUrl}}/api/ai/drafts/{{draftId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "组织测试结果讨论",
+  "assignee": "张三",
+  "deadline": "2026-09-11",
+  "priority": "中",
+  "sourceText": "大家周五讨论测试结果"
+}
+
+### 确认草稿
+POST {{baseUrl}}/api/tasks/confirm
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "draftId": {{draftId}}
+}
+
+### 团队任务
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### 更新任务
+PATCH {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "进行中",
+  "progressPercent": 50
+}
+
+### 统计
+GET {{baseUrl}}/api/statistics
+Authorization: Bearer {{token}}
+
+### AI 提取记录
+GET {{baseUrl}}/api/ai/extractions
+Authorization: Bearer {{token}}
+
+### 审计日志
+GET {{baseUrl}}/api/audit-logs?limit=100
+Authorization: Bearer {{token}}
+
