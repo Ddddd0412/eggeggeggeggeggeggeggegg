@@ -150,3 +150,20 @@ td input, td select { min-width: 120px; padding: 8px; }
   .button-row { flex-direction: column; }
   .button-row .btn { width: 100%; }
 }
+
+/* ===== 会议录音 ===== */
+.record-section { margin-top: 16px; margin-bottom: 16px; padding: 15px; border: 1px solid #e5eaf1; border-radius: 10px; background: #f8fafc; }
+.record-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.record-header > div { display: flex; flex-direction: column; gap: 4px; }
+.record-header > div span { color: #64748b; font-size: 12px; }
+.record-status { display: inline-flex; align-items: center; width: fit-content; padding: 5px 9px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 12px; white-space: nowrap; }
+.record-status.recording { background: #fee2e2; color: #b91c1c; }
+.record-status.recording::before { content: ''; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #dc2626; }
+.record-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.audio-player { display: block; width: 100%; margin-top: 14px; }
+.priority-unspecified { background: #f1f5f9; color: #64748b; }
+
+@media (max-width: 520px) {
+  .record-header { align-items: flex-start; flex-direction: column; }
+  .record-actions .btn { width: 100%; }
+}

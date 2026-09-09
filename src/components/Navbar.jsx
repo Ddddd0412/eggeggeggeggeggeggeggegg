@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { logout as logoutApi } from '../api/api';
 import RoleBadge from './RoleBadge';
 
 export default function Navbar({ currentUser }) {
   const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const links = [
     ['/meetings', '会议纪要'],
     ['/ai-tasks', 'AI任务确认'],
@@ -11,9 +15,16 @@ export default function Navbar({ currentUser }) {
     ['/statistics', '数据统计'],
   ];
 
-  const logout = () => {
-    localStorage.removeItem('currentUser');
-    navigate('/login');
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logoutApi();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      navigate('/login');
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -31,10 +42,13 @@ export default function Navbar({ currentUser }) {
           ))}
         </nav>
       </div>
+
       <div className="sidebar-user">
         <div className="user-name">{currentUser?.name}</div>
         <RoleBadge role={currentUser?.role} />
-        <button className="btn secondary full" onClick={logout}>退出登录</button>
+        <button className="btn secondary full" onClick={handleLogout} disabled={loggingOut}>
+          {loggingOut ? '退出中...' : '退出登录'}
+        </button>
       </div>
     </aside>
   );
