@@ -111,6 +111,29 @@
 | `PATCH /api/meetings/:id` | 组长；原录入组员 | 修改会议 |
 | `DELETE /api/meetings/:id` | 组长；原录入组员 | 软删除会议 |
 
+### `POST /api/meetings/transcribe`
+
+权限：组长、组员。请求体直接传输录音二进制数据，并设置：
+
+```http
+Content-Type: audio/mp4
+X-Audio-Filename: %E4%BC%9A%E8%AE%AE%E5%BD%95%E9%9F%B3.m4a
+Authorization: Bearer <token>
+```
+
+支持 FLAC、MP3、MP4、M4A、OGG、WAV 和 WebM，最大 25MB。后端使用 `TRANSCRIPTION_*` 环境变量调用转写服务，前端不会获得 API 密钥。
+
+```json
+{
+  "success": true,
+  "data": {
+    "transcript": "小王周五前完成接口联调。",
+    "model": "gpt-4o-mini-transcribe"
+  },
+  "message": "录音转写完成"
+}
+```
+
 新增/修改请求：
 
 ```json

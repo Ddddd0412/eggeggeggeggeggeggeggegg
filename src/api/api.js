@@ -9,10 +9,11 @@ function clearSession() {
 
 async function request(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
+  const isJsonBody = options.body && typeof options.body === 'string';
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(isJsonBody ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -74,6 +75,18 @@ export async function getTeamMembers() {
 
 export async function getMeetings() {
   return request('/api/meetings');
+}
+
+export async function transcribeAudio(file) {
+  const data = await request('/api/meetings/transcribe', {
+    method: 'POST',
+    body: file,
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Audio-Filename': encodeURIComponent(file.name || 'recording.webm'),
+    },
+  });
+  return data.transcript;
 }
 
 export async function createMeeting(meeting) {

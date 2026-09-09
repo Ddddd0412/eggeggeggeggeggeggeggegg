@@ -34,7 +34,14 @@ function resolveProjectPath(value) {
 
 loadEnvFile();
 
+function defaultTranscriptionUrl(chatUrl) {
+  if (!chatUrl) return '';
+  return chatUrl.replace(/\/chat\/completions\/?$/, '/audio/transcriptions');
+}
+
 export function buildConfig(overrides = {}) {
+  const llmApiUrl = overrides.llmApiUrl ?? process.env.LLM_API_URL ?? '';
+  const llmApiKey = overrides.llmApiKey ?? process.env.LLM_API_KEY ?? '';
   return {
     port: Number(overrides.port ?? process.env.PORT ?? 3001),
     databasePath: resolveProjectPath(
@@ -44,10 +51,13 @@ export function buildConfig(overrides = {}) {
     frontendOrigin: overrides.frontendOrigin ?? process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
     autoSeedDemo: overrides.autoSeedDemo ?? asBoolean(process.env.AUTO_SEED_DEMO, true),
     llmMode: overrides.llmMode ?? process.env.LLM_MODE ?? 'mock',
-    llmApiUrl: overrides.llmApiUrl ?? process.env.LLM_API_URL ?? '',
-    llmApiKey: overrides.llmApiKey ?? process.env.LLM_API_KEY ?? '',
+    llmApiUrl,
+    llmApiKey,
     llmModel: overrides.llmModel ?? process.env.LLM_MODEL ?? '',
     llmTimeoutMs: Number(overrides.llmTimeoutMs ?? process.env.LLM_TIMEOUT_MS ?? 30000),
+    transcriptionApiUrl: overrides.transcriptionApiUrl ?? process.env.TRANSCRIPTION_API_URL ?? defaultTranscriptionUrl(llmApiUrl),
+    transcriptionApiKey: overrides.transcriptionApiKey ?? process.env.TRANSCRIPTION_API_KEY ?? llmApiKey,
+    transcriptionModel: overrides.transcriptionModel ?? process.env.TRANSCRIPTION_MODEL ?? 'gpt-4o-mini-transcribe',
+    transcriptionTimeoutMs: Number(overrides.transcriptionTimeoutMs ?? process.env.TRANSCRIPTION_TIMEOUT_MS ?? 120000),
   };
 }
-

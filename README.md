@@ -7,6 +7,7 @@
 - 注册、登录、退出和基于随机令牌的会话认证
 - 团队创建/加入及组长、组员、教师/助教三类权限
 - 会议纪要新增、查询、修改和软删除
+- 会议录音上传、后端语音转写与纪要回填
 - AI 任务草稿提取、原文依据校验和相对日期解析
 - 草稿人工修改、拒绝、确认及正式任务创建
 - 团队任务看板、个人任务、状态/进度更新和软删除
@@ -73,6 +74,16 @@ LLM_API_URL=https://你的服务地址/v1/chat/completions
 LLM_API_KEY=只保存在后端的密钥
 LLM_MODEL=你的模型名
 ```
+
+语音转写同样只由后端调用：
+
+```dotenv
+TRANSCRIPTION_API_URL=https://api.openai.com/v1/audio/transcriptions
+TRANSCRIPTION_API_KEY=可留空以复用LLM_API_KEY
+TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+```
+
+页面支持上传 M4A、MP3、WAV、WebM 等录音（最大 25MB）。转写结果会先回填到纪要文本框，仍需人工核对后再保存和提取任务。
 
 密钥不会发送给浏览器，也不会写入数据库或日志。系统只在用户点击“AI提取任务”时调用一次模型，并把输入快照、模型响应和结构化草稿保存在数据库中。
 

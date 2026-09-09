@@ -24,12 +24,14 @@ import {
   nowIso,
   optionalText,
   parsePositiveInteger,
+  readBinaryBody,
   readJsonBody,
   sendError,
   sendSuccess,
   requireText,
   toPublicErrorMessage,
 } from './utils.js';
+import { transcribeAudio } from './transcriptionService.js';
 
 const PRIORITIES = new Set(['高', '中', '低', '未指定']);
 const TASK_STATUSES = new Set(['待开始', '进行中', '已完成', '已取消']);
@@ -399,6 +401,18 @@ async function handleCreateMeeting(db, user, teamId, request, response) {
   const meetingId = Number(result.lastInsertRowid);
   addAudit(db, { teamId, userId: user.id, entityType: 'meeting', entityId: meetingId, action: 'created', newValue: title });
   sendSuccess(response, serializeMeeting(getMeetingRow(db, meetingId)), '会议纪要已保存', 201);
+}
+
+async function handleTranscribe(config, user, request, response) {
+  requireStudentWrite(user);
+  const audio = await readBinaryBody(request);
+  const result = await transcribeAudio({
+    audio,
+    filename: request.headers['x-audio-filename'],
+    contentType: request.headers['content-type'],
+    config,
+  });
+  sendSuccess(response, result, '录音转写完成');
 }
 
 async function handleUpdateMeeting(db, user, teamId, meetingId, request, response) {
@@ -831,6 +845,7 @@ async function routeRequest(db, config, request, response) {
     sendSuccess(response, rows.map(serializeMeeting));
     return;
   }
+  if (method === 'POST' && url.pathname === '/api/meetings/transcribe') return handleTranscribe(config, user, request, response);
   if (method === 'POST' && url.pathname === '/api/meetings') return handleCreateMeeting(db, user, teamId, request, response);
   const meetingMatch = url.pathname.match(/^\/api\/meetings\/(\d+)$/);
   if (meetingMatch && method === 'GET') {

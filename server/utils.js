@@ -55,6 +55,22 @@ export async function readJsonBody(request, maxBytes = 1024 * 1024) {
   }
 }
 
+export async function readBinaryBody(request, maxBytes = 25 * 1024 * 1024) {
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      throw new HttpError(413, 'PAYLOAD_TOO_LARGE', '录音文件不能超过25MB');
+    }
+    chunks.push(chunk);
+  }
+
+  if (chunks.length === 0) throw new HttpError(422, 'EMPTY_AUDIO', '请上传录音文件');
+  return Buffer.concat(chunks);
+}
+
 export function requireText(value, fieldName, maxLength = 255) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new HttpError(422, 'VALIDATION_ERROR', `${fieldName}不能为空`, { field: fieldName });

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -87,6 +88,66 @@ test('“尽快”不会被推断为高优先级', async () => {
   assert.equal(extraction.tasks[0].priority, '未指定');
   assert.equal(extraction.tasks[0].needsConfirmation, true);
   assert.match(extraction.tasks[0].ambiguityReason, /截止时间/);
+});
+
+test('录音只由后端转发给转写 API，密钥不暴露给前端', async (t) => {
+  let upstreamAuthorization = '';
+  let upstreamBody = '';
+  const upstream = http.createServer(async (request, response) => {
+    upstreamAuthorization = request.headers.authorization || '';
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    upstreamBody = Buffer.concat(chunks).toString('latin1');
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ text: '小王周五前完成录音转写接口联调。' }));
+  });
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve));
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'taskflow-transcription-test-'));
+  const app = createApplication({
+    databasePath: path.join(directory, 'test.sqlite'),
+    autoSeedDemo: true,
+    llmMode: 'mock',
+    transcriptionApiUrl: `http://127.0.0.1:${upstream.address().port}/v1/audio/transcriptions`,
+    transcriptionApiKey: 'server-only-test-key',
+    transcriptionModel: 'test-transcribe-model',
+  });
+  await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
+  const baseUrl = `http://127.0.0.1:${app.server.address().port}`;
+  t.after(async () => {
+    await app.close();
+    await new Promise((resolve, reject) => upstream.close((error) => (error ? reject(error) : resolve())));
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  const leader = await login(baseUrl, 'zhangsan@example.com');
+  const teacher = await login(baseUrl, 'teacher@example.com');
+  const transcription = await fetch(`${baseUrl}/api/meetings/transcribe`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${leader.token}`,
+      'Content-Type': 'audio/mp4',
+      'X-Audio-Filename': encodeURIComponent('会议录音.m4a'),
+    },
+    body: Buffer.from('fake-m4a-audio'),
+  });
+  const payload = await transcription.json();
+  assert.equal(transcription.status, 200);
+  assert.equal(payload.data.transcript, '小王周五前完成录音转写接口联调。');
+  assert.equal(upstreamAuthorization, 'Bearer server-only-test-key');
+  assert.match(upstreamBody, /test-transcribe-model/);
+  assert.match(upstreamBody, /fake-m4a-audio/);
+
+  const teacherAttempt = await fetch(`${baseUrl}/api/meetings/transcribe`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${teacher.token}`,
+      'Content-Type': 'audio/mp4',
+      'X-Audio-Filename': 'recording.m4a',
+    },
+    body: Buffer.from('fake-m4a-audio'),
+  });
+  assert.equal(teacherAttempt.status, 403);
 });
 
 test('完整后端流程、角色权限、团队隔离与审计记录', async (t) => {
