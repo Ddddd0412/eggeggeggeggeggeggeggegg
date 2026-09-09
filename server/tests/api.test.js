@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createApplication } from '../app.js';
-import { resolveDueDate } from '../aiService.js';
+import { extractTaskDrafts, PROMPT_VERSION, resolveDueDate } from '../aiService.js';
 import { isIsoDate } from '../utils.js';
 
 async function startTestApplication() {
@@ -54,6 +54,39 @@ test('中文相对日期以会议日期为基准解析，无法判断时不猜�
   assert.equal(resolveDueDate('月底前', '2026-09-08'), null);
   assert.equal(isIsoDate('2026-02-31'), false);
   assert.equal(isIsoDate('2026-02-28'), true);
+});
+
+test('AI mock 与成员1规则一致：过滤待定、笼统、否定和已完成事项', async () => {
+  const extraction = await extractTaskDrafts({
+    meetingDate: '2026-09-08',
+    members: [{ id: 1, name: '小张' }],
+    content: [
+      '下次可能增加数据分析模块，具体谁做之后再商量。',
+      '大家尽快完善系统。',
+      '小张不用再修改PPT。',
+      '小张已经完成接口文档。',
+      '小张周五检查登录页面。',
+    ].join(''),
+  }, { llmMode: 'mock' });
+
+  assert.equal(PROMPT_VERSION, 'task-extraction-v2');
+  assert.equal(extraction.tasks.length, 1);
+  assert.match(extraction.tasks[0].title, /检查登录页面/);
+  assert.equal(extraction.tasks[0].assigneeText, '小张');
+  assert.equal(extraction.tasks[0].dueDate, '2026-09-11');
+});
+
+test('“尽快”不会被推断为高优先级', async () => {
+  const extraction = await extractTaskDrafts({
+    meetingDate: '2026-09-08',
+    members: [{ id: 1, name: '小张' }],
+    content: '小张尽快整理测试数据。',
+  }, { llmMode: 'mock' });
+
+  assert.equal(extraction.tasks.length, 1);
+  assert.equal(extraction.tasks[0].priority, '未指定');
+  assert.equal(extraction.tasks[0].needsConfirmation, true);
+  assert.match(extraction.tasks[0].ambiguityReason, /截止时间/);
 });
 
 test('完整后端流程、角色权限、团队隔离与审计记录', async (t) => {

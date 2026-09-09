@@ -1,6 +1,39 @@
 import { HttpError, isIsoDate } from './utils.js';
 
-export const PROMPT_VERSION = 'task-extraction-v1';
+export const PROMPT_VERSION = 'task-extraction-v2';
+
+const TASK_EXTRACTION_SCHEMA = {
+  name: 'meeting_task_extraction',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['tasks'],
+    properties: {
+      tasks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'title', 'assignee', 'due_date_text', 'due_date', 'priority',
+            'source_quote', 'needs_confirmation', 'ambiguity_reason',
+          ],
+          properties: {
+            title: { type: 'string' },
+            assignee: { type: 'string' },
+            due_date_text: { type: 'string' },
+            due_date: { type: 'string' },
+            priority: { type: 'string', enum: ['高', '中', '低', '未指定'] },
+            source_quote: { type: 'string' },
+            needs_confirmation: { type: 'boolean' },
+            ambiguity_reason: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+};
 
 const WEEKDAYS = {
   一: 1,
@@ -73,7 +106,7 @@ export function resolveDueDate(dateText, meetingDate) {
 
 function normalizePriority(value, text = '') {
   const combined = `${value || ''}${text}`;
-  if (/高|紧急|优先|尽快|必须/.test(combined)) return '高';
+  if (/高|紧急|优先|必须/.test(combined)) return '高';
   if (/低|不急|有空|之后/.test(combined)) return '低';
   if (/中|普通|正常/.test(combined)) return '中';
   return '未指定';
@@ -100,6 +133,15 @@ function findDateText(text) {
     /(20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}(?:日)?|\d{1,2}月\d{1,2}日?|(?:下周|下星期|本周|这周|本星期|这星期|周|星期)[一二三四五六日天]|今天|当天|明天|后天)(?:前|之前|以前|截止)?/,
   );
   return match ? match[0] : null;
+}
+
+function shouldIgnoreAsTask(text) {
+  const value = String(text || '').trim();
+  if (/可能|考虑|建议|之后再商量|以后再说|暂不决定/.test(value)) return true;
+  if (/不用|无需|不需要|取消/.test(value)) return true;
+  if (/(已经|已).*(完成|结束|提交|处理)/.test(value)) return true;
+  if (/^(?:大家|全体成员|全员)?(?:尽快|继续|认真)?(?:完善|优化)(?:一下)?(?:系统|项目)?$/.test(value)) return true;
+  return false;
 }
 
 function normalizeModelTask(rawTask, context) {
@@ -154,6 +196,7 @@ function extractLocally(context) {
     }
 
     for (const piece of pieces) {
+      if (shouldIgnoreAsTask(piece)) continue;
       const mentioned = context.members.find((member) => piece.includes(member.name));
       const groupAssignee = /大家|全体成员|全员/.test(piece);
       const ownDateText = findDateText(piece);
@@ -184,10 +227,19 @@ function extractLocally(context) {
 function buildPrompt(context) {
   const memberList = context.members.map((member) => member.name).join('、');
   return [
-    '你是课程小组任务抽取助手。只提取会议中明确要求执行的行动项，不作任何业务决定。',
-    '必须输出一个JSON对象，格式为：',
-    '{"tasks":[{"title":"任务名称","assignee":"负责人姓名或空字符串","due_date_text":"原始时间表达或空字符串","due_date":"YYYY-MM-DD或空字符串","priority":"高|中|低|未指定","source_quote":"会议原文中的连续原句","needs_confirmation":true,"ambiguity_reason":"原因或空字符串"}]}',
-    '规则：负责人只能使用成员名单中的精确姓名；不得补写原文没有的信息；日期以会议日期为基准；不明确则留空并标记needs_confirmation；source_quote必须逐字来自原文；不要输出Markdown。',
+    '你是课程小组会议纪要的任务提取助手，只生成待人工确认的任务草稿，不作业务决定。',
+    '规则：',
+    '1. 只提取已经明确决定执行、具有具体动作和对象的事项，不得编造原文没有的信息。',
+    '2. “可能、考虑、建议、之后再商量”等尚未决定的想法不要生成任务。',
+    '3. “大家尽快完善系统”等缺少具体动作对象或完成标准的笼统要求不要生成任务。',
+    '4. 否定、取消或已经完成的事项不要生成待办任务。',
+    '5. 明确约定的会议、讨论、汇报和检查，只要有行动内容，就应生成任务。',
+    '6. 负责人只能填写成员名单中的精确姓名；“前端、后端、数据库”等技术模块不是负责人。',
+    '7. 不默认把前一句的负责人或时间继承给后一句。字段不明确时填写空字符串。',
+    '8. due_date_text 保留原文时间表达；能明确换算时 due_date 填 YYYY-MM-DD，否则为空字符串。',
+    '9. priority 只能依据原文明示的优先级；“尽快”不是高优先级，未说明时填写“未指定”。',
+    '10. source_quote 必须是会议纪要中的连续原句。',
+    '11. 负责人、截止时间或原文依据不明确时，needs_confirmation 必须为 true，并在 ambiguity_reason 中逐项说明。',
     `会议日期：${context.meetingDate}`,
     `团队成员：${memberList}`,
     `会议纪要：${context.content}`,
@@ -226,7 +278,7 @@ async function extractWithCompatibleApi(context, config) {
       body: JSON.stringify({
         model: config.llmModel,
         temperature: 0,
-        response_format: { type: 'json_object' },
+        response_format: { type: 'json_schema', json_schema: TASK_EXTRACTION_SCHEMA },
         messages: [
           { role: 'system', content: '严格遵守任务抽取规则并仅返回JSON。' },
           { role: 'user', content: buildPrompt(context) },

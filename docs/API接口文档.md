@@ -138,7 +138,7 @@
   "extractionRunId": 1,
   "provider": "local-mock",
   "model": "deterministic-rule-v1",
-  "promptVersion": "task-extraction-v1",
+  "promptVersion": "task-extraction-v2",
   "drafts": [
     {
       "id": 1,
@@ -292,4 +292,3 @@
 ### `GET /api/health`
 
 无需登录，返回服务、数据库和 AI 模式状态。可用于部署健康检查，但不会暴露密钥。
-
