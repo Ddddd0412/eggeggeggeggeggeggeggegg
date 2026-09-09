@@ -55,6 +55,40 @@ export async function readJsonBody(request, maxBytes = 1024 * 1024) {
   }
 }
 
+export async function readMultipartFormData(request, maxBytes = 25 * 1024 * 1024) {
+  const contentType = String(request.headers['content-type'] || '');
+  if (!contentType.toLowerCase().startsWith('multipart/form-data;')) {
+    throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', '请使用multipart/form-data上传音频');
+  }
+
+  const contentLength = Number(request.headers['content-length']);
+  const envelopeAllowance = 512 * 1024;
+  if (Number.isFinite(contentLength) && contentLength > maxBytes + envelopeAllowance) {
+    throw new HttpError(413, 'AUDIO_TOO_LARGE', '音频文件过大');
+  }
+
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes + envelopeAllowance) {
+      throw new HttpError(413, 'AUDIO_TOO_LARGE', '音频文件过大');
+    }
+    chunks.push(chunk);
+  }
+
+  try {
+    const webRequest = new Request('http://localhost/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': contentType },
+      body: Buffer.concat(chunks),
+    });
+    return await webRequest.formData();
+  } catch {
+    throw new HttpError(400, 'INVALID_MULTIPART', '无法解析上传内容，请重新选择音频');
+  }
+}
+
 export function requireText(value, fieldName, maxLength = 255) {
   if (typeof value !== 'string' || !value.trim()) {
     throw new HttpError(422, 'VALIDATION_ERROR', `${fieldName}不能为空`, { field: fieldName });

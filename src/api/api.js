@@ -9,10 +9,11 @@ function clearSession() {
 
 async function request(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
@@ -92,6 +93,21 @@ export async function updateMeeting(id, updates) {
 
 export async function deleteMeeting(id) {
   return request(`/api/meetings/${id}`, { method: 'DELETE' });
+}
+
+export async function transcribeMeetingAudio(audio, {
+  fileName = 'meeting-recording.webm',
+  language = 'zh',
+  meetingId,
+} = {}) {
+  const formData = new FormData();
+  formData.append('audio', audio, fileName);
+  formData.append('language', language);
+  if (meetingId) formData.append('meetingId', String(meetingId));
+  return request('/api/meetings/transcribe', {
+    method: 'POST',
+    body: formData,
+  });
 }
 
 export async function extractTasks(meeting) {

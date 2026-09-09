@@ -77,6 +77,20 @@ h2 { font-size: 18px; margin-bottom: 18px; }
 .meeting-item > div { display: flex; justify-content: space-between; gap: 12px; }
 .meeting-item span { color: #94a3b8; font-size: 12px; }
 .meeting-item p { color: #64748b; font-size: 13px; line-height: 1.6; margin: 8px 0 0; }
+.recording-box { margin: 15px 0; padding: 15px; border: 1px solid #dbe3ed; border-radius: 11px; background: #f8fafc; }
+.recording-box.is-recording { border-color: #fca5a5; background: #fff7f7; }
+.recording-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.recording-heading strong { display: flex; align-items: center; gap: 8px; }
+.recording-heading p { margin: 6px 0 0; color: #64748b; font-size: 12px; line-height: 1.5; }
+.recording-dot { width: 9px; height: 9px; border-radius: 999px; background: #94a3b8; flex: 0 0 auto; }
+.is-recording .recording-dot { background: #ef4444; animation: recording-pulse 1.2s infinite; }
+.recording-time { padding: 5px 9px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; font-variant-numeric: tabular-nums; font-size: 13px; }
+.recording-controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 13px; }
+.recording-controls .btn:last-child { margin-left: auto; }
+.recording-preview { display: block; width: 100%; height: 38px; margin-top: 13px; }
+.recording-box small { display: block; color: #94a3b8; line-height: 1.5; margin-top: 10px; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+@keyframes recording-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.4); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
 .form-grid { display: grid; gap: 14px; }
 .form-grid.two { grid-template-columns: 1fr 1fr; }
 .permission-banner, .permission-tip { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; }
@@ -157,4 +171,6 @@ td input, td select { min-width: 120px; padding: 8px; }
   .filter-row select { width: 100%; }
   .button-row { flex-direction: column; }
   .button-row .btn { width: 100%; }
+  .recording-controls { flex-direction: column; }
+  .recording-controls .btn, .recording-controls .btn:last-child { width: 100%; margin-left: 0; }
 }

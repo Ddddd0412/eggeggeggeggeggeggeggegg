@@ -114,3 +114,27 @@ LLM_TIMEOUT_MS=30000
 
 这些数据正是项目“复盘 AI 容易出错的内容”的证据。
 
+## 录音转写接口
+
+语音转写与任务提取是两个独立步骤：先把音频转换成可编辑文字，由用户核对会议纪要；保存后再执行结构化任务提取。这样不会让语音识别误差直接变成正式任务。
+
+`POST /api/meetings/transcribe` 的服务端流程：
+
+1. 先校验登录状态、团队和只读角色；
+2. 解析 multipart 上传，并限制为支持格式和最多 25 MiB；
+3. 创建 `transcription_runs` 的 `pending` 记录；
+4. `mock` 模式返回确定性示例文字，`api` 模式由后端转发给转写服务；
+5. 成功后保存转写文本并记录 `completed` 审计，失败则保存安全错误和 `failed` 审计；
+6. 原始音频始终不落库，API Key 始终不返回前端。
+
+真实模式配置：
+
+```dotenv
+TRANSCRIPTION_MODE=api
+TRANSCRIPTION_API_URL=https://api.openai.com/v1/audio/transcriptions
+TRANSCRIPTION_API_KEY=your-server-side-key
+TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+TRANSCRIPTION_LANGUAGE=zh
+```
+
+前端不自行设置 multipart 的 `Content-Type`；由浏览器根据 `FormData` 生成包含 boundary 的请求头。后端响应同时返回 `text` 和 `transcript`，兼容不同前端分支的字段命名。

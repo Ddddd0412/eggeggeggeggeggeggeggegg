@@ -7,6 +7,7 @@
 - 注册、登录、退出和基于随机令牌的会话认证
 - 团队创建/加入及组长、组员、教师/助教三类权限
 - 会议纪要新增、查询、修改和软删除
+- 浏览器录音、音频试听、文件上传和服务端语音转写
 - AI 任务草稿提取、原文依据校验和相对日期解析
 - 草稿人工修改、拒绝、确认及正式任务创建
 - 团队任务看板、个人任务、状态/进度更新和软删除
@@ -20,7 +21,7 @@
 - 后端：Node.js 原生 HTTP 服务（无后端第三方依赖）
 - 数据库：Node.js 原生 `node:sqlite` + SQLite
 - 认证：`scrypt` 密码哈希、服务端哈希保存的随机 Bearer Token
-- AI：默认离线规则演示；可切换 OpenAI-compatible Chat Completions API
+- AI：任务提取与语音转写均提供离线演示模式，也可分别切换到 OpenAI-compatible API
 
 ## 环境要求
 
@@ -76,6 +77,24 @@ LLM_MODEL=你的模型名
 
 密钥不会发送给浏览器，也不会写入数据库或日志。系统只在用户点击“AI提取任务”时调用一次模型，并把输入快照、模型响应和结构化草稿保存在数据库中。
 
+## 录音转写
+
+会议纪要页支持直接使用浏览器麦克风录音，也支持选择 `mp3/wav/m4a/ogg/flac/mp4/webm` 文件。音频上传到 `POST /api/meetings/transcribe` 后，由后端鉴权、校验并调用转写服务，转写文字会自动填入会议纪要供人工核对。
+
+默认 `TRANSCRIPTION_MODE=mock`，无需网络和密钥即可演示完整交互。启用真实转写时修改 `.env`：
+
+```dotenv
+TRANSCRIPTION_MODE=api
+TRANSCRIPTION_API_URL=https://api.openai.com/v1/audio/transcriptions
+TRANSCRIPTION_API_KEY=只保存在后端的密钥
+TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+TRANSCRIPTION_LANGUAGE=zh
+TRANSCRIPTION_TIMEOUT_MS=60000
+TRANSCRIPTION_MAX_BYTES=26214400
+```
+
+如果 `TRANSCRIPTION_API_KEY` 留空，后端会复用 `LLM_API_KEY`。原始音频只在内存中转发，不写入数据库；数据库仅记录文件元数据、运行状态、转写文本和审计日志。真实密钥不得放入任何 `VITE_*` 配置。
+
 ## 测试与生产运行
 
 ```bash
@@ -98,6 +117,7 @@ meeting-task-system/
 │   ├── scripts/             # 迁移和演示数据命令
 │   ├── tests/               # API 自动化测试
 │   ├── aiService.js         # 提示词、模型调用、结果校验
+│   ├── transcriptionService.js # 音频校验和转写服务适配
 │   ├── app.js               # REST API 和业务权限
 │   ├── auth.js              # 密码与会话认证
 │   └── database.js          # 数据库初始化和演示数据
@@ -109,6 +129,7 @@ meeting-task-system/
 
 ## 成员3文档入口
 
+- [录音转写优化说明（从这里开始）](docs/录音转写优化说明.md)
 - [成员3一步一步实施指南](docs/成员3一步一步实施指南.md)
 - [数据库设计](docs/数据库设计.md)
 - [REST API 接口文档](docs/API接口文档.md)

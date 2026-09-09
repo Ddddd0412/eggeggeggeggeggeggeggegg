@@ -35,6 +35,7 @@ function resolveProjectPath(value) {
 loadEnvFile();
 
 export function buildConfig(overrides = {}) {
+  const llmApiKey = overrides.llmApiKey ?? process.env.LLM_API_KEY ?? '';
   return {
     port: Number(overrides.port ?? process.env.PORT ?? 3001),
     databasePath: resolveProjectPath(
@@ -45,9 +46,31 @@ export function buildConfig(overrides = {}) {
     autoSeedDemo: overrides.autoSeedDemo ?? asBoolean(process.env.AUTO_SEED_DEMO, true),
     llmMode: overrides.llmMode ?? process.env.LLM_MODE ?? 'mock',
     llmApiUrl: overrides.llmApiUrl ?? process.env.LLM_API_URL ?? '',
-    llmApiKey: overrides.llmApiKey ?? process.env.LLM_API_KEY ?? '',
+    llmApiKey,
     llmModel: overrides.llmModel ?? process.env.LLM_MODEL ?? '',
     llmTimeoutMs: Number(overrides.llmTimeoutMs ?? process.env.LLM_TIMEOUT_MS ?? 30000),
+    transcriptionMode: overrides.transcriptionMode ?? process.env.TRANSCRIPTION_MODE ?? 'mock',
+    transcriptionApiUrl: overrides.transcriptionApiUrl
+      ?? process.env.TRANSCRIPTION_API_URL
+      ?? 'https://api.openai.com/v1/audio/transcriptions',
+    transcriptionApiKey: overrides.transcriptionApiKey
+      ?? process.env.TRANSCRIPTION_API_KEY
+      ?? llmApiKey,
+    transcriptionModel: overrides.transcriptionModel
+      ?? process.env.TRANSCRIPTION_MODEL
+      ?? 'gpt-4o-mini-transcribe',
+    transcriptionLanguage: overrides.transcriptionLanguage
+      ?? process.env.TRANSCRIPTION_LANGUAGE
+      ?? 'zh',
+    transcriptionTimeoutMs: Number(
+      overrides.transcriptionTimeoutMs ?? process.env.TRANSCRIPTION_TIMEOUT_MS ?? 60000,
+    ),
+    transcriptionMaxBytes: Math.min(
+      Number(overrides.transcriptionMaxBytes ?? process.env.TRANSCRIPTION_MAX_BYTES ?? 25 * 1024 * 1024),
+      25 * 1024 * 1024,
+    ),
+    transcriptionMockText: overrides.transcriptionMockText
+      ?? process.env.TRANSCRIPTION_MOCK_TEXT
+      ?? '下周三前，小王整理实验数据，小李完成展示PPT，大家周五讨论测试结果。',
   };
 }
-

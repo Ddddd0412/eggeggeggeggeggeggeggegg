@@ -4,7 +4,7 @@
 
 - 开发地址：`http://localhost:3001`
 - 前缀：`/api`
-- 请求/响应：`application/json`
+- 普通请求/响应：`application/json`；音频上传使用 `multipart/form-data`
 - 认证：`Authorization: Bearer <token>`
 - 日期：`YYYY-MM-DD`
 - 时间戳：ISO 8601 UTC
@@ -32,7 +32,7 @@
 }
 ```
 
-常见状态码：`200` 成功、`201` 创建成功、`400/422` 参数错误、`401` 未登录、`403` 无权限、`404` 不存在、`409` 状态冲突、`500/502/503` 服务端或模型错误。
+常见状态码：`200` 成功、`201` 创建成功、`400/422` 参数错误、`401` 未登录、`403` 无权限、`404` 不存在、`409` 状态冲突、`413` 文件过大、`415` 格式错误、`500/502/503/504` 服务端、上游或超时错误。
 
 ## 认证
 
@@ -120,6 +120,45 @@
   "content": "下周三前，小王整理实验数据。"
 }
 ```
+
+### `POST /api/meetings/transcribe`
+
+权限：组长、组员。请求必须使用 `multipart/form-data`：
+
+| 字段 | 必填 | 说明 |
+|---|:---:|---|
+| `audio` | 是 | 音频文件；兼容字段名 `file`、`audioFile` |
+| `language` | 否 | 默认 `zh`；传 `auto` 表示不向上游指定语言 |
+| `meetingId` | 否 | 已保存会议 ID；传入时后端校验团队归属 |
+
+支持 `flac/mp3/mp4/mpeg/mpga/m4a/ogg/wav/webm`，服务端上限为 25 MiB。示例：
+
+```bash
+curl -X POST http://localhost:3001/api/meetings/transcribe \
+  -H "Authorization: Bearer 你的token" \
+  -F "audio=@./meeting.webm" \
+  -F "language=zh"
+```
+
+成功响应数据：
+
+```json
+{
+  "runId": 1,
+  "text": "小王下周三前整理实验数据。",
+  "transcript": "小王下周三前整理实验数据。",
+  "provider": "openai-compatible",
+  "model": "gpt-4o-mini-transcribe",
+  "language": "zh",
+  "file": {
+    "name": "meeting.webm",
+    "mimeType": "audio/webm",
+    "sizeBytes": 143210
+  }
+}
+```
+
+后端不会保存原始音频；只记录运行状态、文件元数据、转写文本和审计日志。上游失败会保存经过清理的错误说明，不会记录密钥。
 
 ## AI 提取与草稿
 
@@ -291,5 +330,4 @@
 
 ### `GET /api/health`
 
-无需登录，返回服务、数据库和 AI 模式状态。可用于部署健康检查，但不会暴露密钥。
-
+无需登录，返回服务、数据库、任务提取模式和录音转写模式。可用于部署健康检查，但不会暴露密钥。

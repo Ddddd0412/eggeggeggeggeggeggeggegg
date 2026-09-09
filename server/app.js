@@ -17,6 +17,7 @@ import {
   verifyPassword,
 } from './auth.js';
 import { extractTaskDrafts, PROMPT_VERSION } from './aiService.js';
+import { normalizeAudioUpload, transcribeAudio, TRANSCRIPTION_FILE_FIELDS } from './transcriptionService.js';
 import {
   corsHeaders,
   HttpError,
@@ -25,6 +26,7 @@ import {
   optionalText,
   parsePositiveInteger,
   readJsonBody,
+  readMultipartFormData,
   sendError,
   sendSuccess,
   requireText,
@@ -399,6 +401,98 @@ async function handleCreateMeeting(db, user, teamId, request, response) {
   const meetingId = Number(result.lastInsertRowid);
   addAudit(db, { teamId, userId: user.id, entityType: 'meeting', entityId: meetingId, action: 'created', newValue: title });
   sendSuccess(response, serializeMeeting(getMeetingRow(db, meetingId)), '会议纪要已保存', 201);
+}
+
+async function handleTranscribeMeeting(db, config, user, teamId, request, response) {
+  requireStudentWrite(user);
+  const formData = await readMultipartFormData(request, config.transcriptionMaxBytes);
+  const file = TRANSCRIPTION_FILE_FIELDS
+    .map((field) => formData.get(field))
+    .find((value) => value && typeof value.arrayBuffer === 'function');
+  const upload = normalizeAudioUpload(file, config.transcriptionMaxBytes);
+  const languageValue = formData.get('language');
+  const language = typeof languageValue === 'string' && languageValue.trim()
+    ? languageValue.trim().toLowerCase()
+    : config.transcriptionLanguage;
+  if (!/^(auto|[a-z]{2,3}(?:-[a-z]{2})?)$/i.test(language)) {
+    throw new HttpError(422, 'INVALID_LANGUAGE', '语言代码格式不正确');
+  }
+
+  const meetingValue = formData.get('meetingId');
+  let meetingId = null;
+  if (typeof meetingValue === 'string' && meetingValue.trim()) {
+    meetingId = parsePositiveInteger(meetingValue, 'meetingId');
+    const meeting = getMeetingRow(db, meetingId);
+    if (!meeting || Number(meeting.team_id) !== teamId) {
+      throw new HttpError(404, 'MEETING_NOT_FOUND', '会议记录不存在');
+    }
+  }
+
+  const requestedProvider = String(config.transcriptionMode).toLowerCase() === 'api'
+    ? 'openai-compatible'
+    : 'local-mock';
+  const requestedModel = requestedProvider === 'local-mock'
+    ? 'deterministic-transcription-v1'
+    : config.transcriptionModel;
+  const run = db.prepare(`
+    INSERT INTO transcription_runs (
+      team_id, meeting_id, requested_by, provider, model_name, original_filename,
+      mime_type, size_bytes, language, status, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+  `).run(
+    teamId, meetingId, user.id, requestedProvider, requestedModel, upload.filename,
+    upload.mimeType, upload.sizeBytes, language, nowIso(),
+  );
+  const runId = Number(run.lastInsertRowid);
+
+  try {
+    const result = await transcribeAudio(upload, language, config);
+    const completedAt = nowIso();
+    withTransaction(db, () => {
+      db.prepare(`
+        UPDATE transcription_runs
+        SET provider = ?, model_name = ?, transcript_text = ?, status = 'succeeded', completed_at = ?
+        WHERE id = ?
+      `).run(result.provider, result.model, result.text, completedAt, runId);
+      addAudit(db, {
+        teamId,
+        userId: user.id,
+        entityType: 'transcription_run',
+        entityId: runId,
+        action: 'completed',
+        newValue: `${upload.filename}（${upload.sizeBytes}字节）`,
+      });
+    });
+    sendSuccess(response, {
+      runId,
+      text: result.text,
+      transcript: result.text,
+      provider: result.provider,
+      model: result.model,
+      language,
+      file: {
+        name: upload.filename,
+        mimeType: upload.mimeType,
+        sizeBytes: upload.sizeBytes,
+      },
+    }, '录音转写完成', 201);
+  } catch (error) {
+    const publicMessage = toPublicErrorMessage(error);
+    withTransaction(db, () => {
+      db.prepare(`
+        UPDATE transcription_runs SET status = 'failed', error_message = ?, completed_at = ? WHERE id = ?
+      `).run(publicMessage, nowIso(), runId);
+      addAudit(db, {
+        teamId,
+        userId: user.id,
+        entityType: 'transcription_run',
+        entityId: runId,
+        action: 'failed',
+        newValue: publicMessage,
+      });
+    });
+    throw error;
+  }
 }
 
 async function handleUpdateMeeting(db, user, teamId, meetingId, request, response) {
@@ -798,7 +892,13 @@ async function routeRequest(db, config, request, response) {
   const method = request.method || 'GET';
 
   if (method === 'GET' && url.pathname === '/api/health') {
-    sendSuccess(response, { status: 'ok', database: 'sqlite', aiMode: config.llmMode, timestamp: nowIso() });
+    sendSuccess(response, {
+      status: 'ok',
+      database: 'sqlite',
+      aiMode: config.llmMode,
+      transcriptionMode: config.transcriptionMode,
+      timestamp: nowIso(),
+    });
     return;
   }
   if (method === 'POST' && url.pathname === '/api/auth/register') return handleRegister(db, request, response);
@@ -832,6 +932,9 @@ async function routeRequest(db, config, request, response) {
     return;
   }
   if (method === 'POST' && url.pathname === '/api/meetings') return handleCreateMeeting(db, user, teamId, request, response);
+  if (method === 'POST' && url.pathname === '/api/meetings/transcribe') {
+    return handleTranscribeMeeting(db, config, user, teamId, request, response);
+  }
   const meetingMatch = url.pathname.match(/^\/api\/meetings\/(\d+)$/);
   if (meetingMatch && method === 'GET') {
     const row = getMeetingRow(db, parsePositiveInteger(meetingMatch[1]));

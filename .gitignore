@@ -1,4 +1,5 @@
 node_modules/
+.venv/
 dist/
 .env
 data/*.sqlite
@@ -6,4 +7,3 @@ data/*.sqlite-*
 coverage/
 *.log
 .DS_Store
-

@@ -35,6 +35,23 @@ Content-Type: application/json
   "content": "下周三前，小王整理实验数据，小李完成展示PPT，大家周五讨论测试结果。"
 }
 
+### 录音转写
+# VS Code REST Client：请把 ./meeting.webm 换成你本机实际存在的音频路径。
+POST {{baseUrl}}/api/meetings/transcribe
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=TaskFlowBoundary
+
+--TaskFlowBoundary
+Content-Disposition: form-data; name="audio"; filename="meeting.webm"
+Content-Type: audio/webm
+
+< ./meeting.webm
+--TaskFlowBoundary
+Content-Disposition: form-data; name="language"
+
+zh
+--TaskFlowBoundary--
+
 ### AI 提取（把上一步响应ID填入 meetingId）
 POST {{baseUrl}}/api/ai/extract
 Authorization: Bearer {{token}}
@@ -95,4 +112,3 @@ Authorization: Bearer {{token}}
 ### 审计日志
 GET {{baseUrl}}/api/audit-logs?limit=100
 Authorization: Bearer {{token}}
-
