@@ -156,11 +156,8 @@ export default function Meetings() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        // 直接使用 audio: true，避免部分电脑在降噪/回声消除下录到静音
+        audio: true,
       });
 
       mediaStreamRef.current = stream;
@@ -176,6 +173,7 @@ export default function Meetings() {
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          console.log('录音数据块大小：', event.data.size);
         }
       };
 
@@ -256,7 +254,18 @@ export default function Meetings() {
 
     clearRecordingTimer();
     setIsRecording(false);
-    recorder.stop();
+
+    try {
+      // 停止前主动取一次最后的数据，避免最后一段声音没有写入
+      if (recorder.state === 'recording') {
+        recorder.requestData();
+      }
+
+      recorder.stop();
+    } catch (error) {
+      console.error('停止录音失败：', error);
+      alert('停止录音失败，请重新尝试。');
+    }
   };
 
   // =========================
@@ -531,7 +540,14 @@ export default function Meetings() {
 
                   <div className="file-actions">
                     {item.file.type.startsWith('audio/') && item.url && (
-                      <audio src={item.url} controls preload="metadata" />
+                      <audio
+                          src={item.url}
+                          controls
+                          preload="auto"
+                          onError={(event) => {
+                            console.error('录音播放失败：', event.currentTarget.error);
+                          }}
+                        />
                     )}
 
                     <button
