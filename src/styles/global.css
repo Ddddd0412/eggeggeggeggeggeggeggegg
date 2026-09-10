@@ -346,3 +346,209 @@ td input, td select { min-width: 120px; padding: 8px; }
     width: 100%;
   }
 }
+/* ==============================
+   会议录音、文件上传与 AI 流程样式
+   复制到 src/styles/global.css 最后
+============================== */
+
+.ai-flow-box {
+  margin: 18px 0 22px;
+  padding: 18px;
+  border-radius: 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.ai-flow-title {
+  font-weight: 700;
+  color: #1d4ed8;
+  margin-bottom: 10px;
+}
+
+.ai-flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ai-flow-steps span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  color: #1e40af;
+  font-size: 13px;
+}
+
+.ai-flow-box p {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+}
+
+.nested-card {
+  margin: 20px 0;
+  background: #f8fafc;
+}
+
+.upload-record-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.upload-box,
+.record-box {
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.upload-box h3,
+.record-box h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: #1f2937;
+}
+
+.upload-box input[type='file'] {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.record-status-line {
+  margin: 14px 0;
+}
+
+.record-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #4b5563;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.record-status.recording {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.record-status.recording::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.record-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.file-list {
+  margin-top: 20px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.file-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.file-list-header h3 {
+  margin: 0;
+  font-size: 17px;
+  color: #1f2937;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.file-info strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #111827;
+  word-break: break-all;
+}
+
+.file-info span {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.file-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-actions audio {
+  width: 260px;
+}
+
+.btn.small {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.btn.danger,
+.btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+}
+
+.btn.danger:hover,
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.empty-state.small {
+  padding: 18px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .upload-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .file-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .file-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .file-actions audio {
+    width: 100%;
+  }
+}
