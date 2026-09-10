@@ -53,9 +53,17 @@ async function request(path, options = {}) {
 // ====================
 
 export async function register(data) {
+  const payload = {
+    username: data.username,
+    email: data.email,
+    password: data.password,
+    teamName: data.teamName,
+    role: data.role,
+  };
+
   const result = await request('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
 
   return result.user ?? result;
@@ -72,7 +80,6 @@ export async function login(data) {
   }
 
   const user = result.user ?? result;
-
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 
   return user;
@@ -120,16 +127,29 @@ export async function getMeetings() {
 }
 
 export async function createMeeting(meeting) {
+  const meetingDate = meeting.date || meeting.meetingDate;
+
   return request('/api/meetings', {
     method: 'POST',
-    body: JSON.stringify(meeting),
+    body: JSON.stringify({
+      ...meeting,
+      // 兼容后端 date / meetingDate 两种字段名，避免“日期已选但后端提示为空”
+      date: meetingDate,
+      meetingDate,
+    }),
   });
 }
 
 export async function updateMeeting(id, meeting) {
+  const meetingDate = meeting.date || meeting.meetingDate;
+
   return request(`/api/meetings/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(meeting),
+    body: JSON.stringify({
+      ...meeting,
+      date: meetingDate,
+      meetingDate,
+    }),
   });
 }
 
@@ -138,11 +158,9 @@ export async function updateMeeting(id, meeting) {
 // 文件 / 录音交给 AI 处理
 // ====================
 
-// 上传多个会议文件和录音文件给 AI 处理。
+// 上传多个会议文件和录音文件给 AI 解析为文本。
 // 注意：FormData 请求不要手动设置 Content-Type。
-// 浏览器会自动生成 multipart/form-data 的 boundary。
-// 前端统一使用字段名 files。
-// 后端需要支持：upload.array('files') 或同等逻辑。
+// 浏览器会自动生成 multipart/form-data boundary。
 export async function transcribeMeetingFiles(files) {
   if (!files || files.length === 0) {
     throw new Error('请先上传文件或录制音频');
@@ -151,17 +169,15 @@ export async function transcribeMeetingFiles(files) {
   const token = localStorage.getItem(TOKEN_KEY);
   const formData = new FormData();
 
+  // 统一字段名：files
+  // 后端需要支持多文件接收，例如 upload.array('files')
   files.forEach((item) => {
     formData.append('files', item.file, item.name);
   });
 
   const response = await fetch('/api/meetings/transcribe', {
     method: 'POST',
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`,
-        }
-      : {},
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
   });
 
@@ -170,47 +186,38 @@ export async function transcribeMeetingFiles(files) {
   try {
     result = await response.json();
   } catch {
-    throw new Error('AI处理结果格式错误');
+    throw new Error('AI解析文本结果格式错误');
   }
 
   if (!response.ok || result.success === false) {
     throw new Error(
       result?.error?.message ||
         result?.error ||
-        `AI处理失败：${response.status}`
+        `AI解析文本失败：${response.status}`
     );
   }
 
   const data = result.data ?? result;
 
-  // 兼容不同后端返回字段
-  // 推荐后端返回：{ transcript: "..." }
-  const transcript =
-    data.transcript ||
-    data.text ||
-    data.content ||
-    '';
+  // 兼容不同后端返回字段：transcript / text / content
+  const transcript = data.transcript || data.text || data.content || '';
 
   if (!transcript) {
-    throw new Error('AI处理结果为空');
+    throw new Error('AI解析结果为空');
   }
 
   return transcript;
 }
 
-// 保留单个录音上传函数，方便其他旧代码继续调用
+// 保留单个录音上传函数，方便旧代码继续调用
 export async function transcribeRecording(audioBlob) {
   if (!audioBlob) {
     throw new Error('没有可上传的录音');
   }
 
-  const file = new File(
-    [audioBlob],
-    `meeting-recording-${Date.now()}.webm`,
-    {
-      type: audioBlob.type || 'audio/webm',
-    }
-  );
+  const file = new File([audioBlob], `meeting-recording-${Date.now()}.webm`, {
+    type: audioBlob.type || 'audio/webm',
+  });
 
   return transcribeMeetingFiles([
     {
@@ -227,23 +234,17 @@ export async function transcribeRecording(audioBlob) {
 // AI任务草稿
 // ====================
 
+// 根据会议 id 生成每个人的 JSON 任务草稿。
+// 推荐后端流程：读取会议纪要 -> 拼接提示词 -> 调 AI -> 保存 task_drafts -> 返回 drafts。
 export async function extractTasks(meeting) {
-  const meetingId =
-    typeof meeting === 'object'
-      ? meeting.id
-      : meeting;
+  const meetingId = typeof meeting === 'object' ? meeting.id : meeting;
 
   const result = await request('/api/ai/extract', {
     method: 'POST',
-    body: JSON.stringify({
-      meetingId,
-    }),
+    body: JSON.stringify({ meetingId }),
   });
 
-  localStorage.setItem(
-    LAST_MEETING_KEY,
-    String(meetingId)
-  );
+  localStorage.setItem(LAST_MEETING_KEY, String(meetingId));
 
   return result.drafts ?? result;
 }
@@ -270,11 +271,11 @@ export async function deleteDraft(id) {
 
 
 // ====================
-// 确认 AI 草稿
+// 管理员审核并分发任务
 // ====================
 
 export async function confirmTask(task) {
-  // 先把前端修改后的草稿同步给后端
+  // 先把管理员在前端修改后的草稿细节同步给后端
   await updateDraft(task.id, {
     title: task.title,
     assignee: task.assignee,
@@ -283,7 +284,7 @@ export async function confirmTask(task) {
     sourceText: task.sourceText,
   });
 
-  // 再把草稿确认成正式任务
+  // 再把草稿确认成正式任务，分发给对应组员
   return request('/api/tasks/confirm', {
     method: 'POST',
     body: JSON.stringify({

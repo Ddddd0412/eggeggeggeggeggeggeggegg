@@ -7,21 +7,30 @@ import {
   transcribeMeetingFiles,
 } from '../api/api';
 
+// 使用本地日期，不使用 toISOString，避免中国时区凌晨日期错一天
+function getLocalDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
 export default function Meetings() {
   const navigate = useNavigate();
 
-  const today = new Date().toISOString().slice(0, 10);
-
   const [form, setForm] = useState({
     title: '',
-    date: today,
+    date: getLocalDateString(),
     content: '',
   });
 
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [aiStep, setAiStep] = useState('等待录音或上传文件');
 
-  // 上传文件和录音文件统一放在这里
+  // 上传文件和录音文件统一放在这里，支持多个文件、多段录音
   const [meetingFiles, setMeetingFiles] = useState([]);
 
   // 录音相关状态
@@ -40,7 +49,6 @@ export default function Meetings() {
       clearRecordingTimer();
       stopMicrophone();
 
-      // 页面关闭时释放本地音频预览地址
       meetingFiles.forEach((item) => {
         if (item.url) {
           URL.revokeObjectURL(item.url);
@@ -83,10 +91,7 @@ export default function Meetings() {
 
   const stopMicrophone = () => {
     if (mediaStreamRef.current) {
-      mediaStreamRef.current
-        .getTracks()
-        .forEach((track) => track.stop());
-
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
   };
@@ -99,11 +104,7 @@ export default function Meetings() {
       'audio/mp4',
     ];
 
-    return (
-      candidates.find((type) =>
-        MediaRecorder.isTypeSupported(type)
-      ) || ''
-    );
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
   };
 
   const formatTime = (seconds) => {
@@ -129,17 +130,11 @@ export default function Meetings() {
       name: file.name,
       type: 'upload',
       file,
-      // 只有音频文件需要生成播放地址
-      url: file.type.startsWith('audio/')
-        ? URL.createObjectURL(file)
-        : '',
+      url: file.type.startsWith('audio/') ? URL.createObjectURL(file) : '',
     }));
 
-    // 不覆盖旧文件，而是追加
-    setMeetingFiles((prev) => [
-      ...prev,
-      ...newFiles,
-    ]);
+    setMeetingFiles((prev) => [...prev, ...newFiles]);
+    setAiStep('已添加文件，可继续录音或点击 AI 解析为文本');
 
     // 清空 input，避免重复选择同一个文件时不触发 change
     event.target.value = '';
@@ -172,7 +167,6 @@ export default function Meetings() {
       audioChunksRef.current = [];
 
       const mimeType = getSupportedMimeType();
-
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
@@ -191,10 +185,7 @@ export default function Meetings() {
       };
 
       recorder.onstop = () => {
-        const actualType =
-          recorder.mimeType ||
-          audioChunksRef.current[0]?.type ||
-          'audio/webm';
+        const actualType = recorder.mimeType || audioChunksRef.current[0]?.type || 'audio/webm';
 
         const blob = new Blob(audioChunksRef.current, {
           type: actualType,
@@ -211,24 +202,11 @@ export default function Meetings() {
         }
 
         let extension = 'webm';
-
-        if (actualType.includes('ogg')) {
-          extension = 'ogg';
-        }
-
-        if (actualType.includes('mp4')) {
-          extension = 'm4a';
-        }
+        if (actualType.includes('ogg')) extension = 'ogg';
+        if (actualType.includes('mp4')) extension = 'm4a';
 
         const fileName = `meeting-recording-${Date.now()}.${extension}`;
-
-        const audioFile = new File(
-          [blob],
-          fileName,
-          {
-            type: actualType,
-          }
-        );
+        const audioFile = new File([blob], fileName, { type: actualType });
 
         const newRecording = {
           id: createFileId(fileName),
@@ -238,19 +216,16 @@ export default function Meetings() {
           url: URL.createObjectURL(audioFile),
         };
 
-        // 录音完成后加入文件列表
-        // 支持多段录音，不会覆盖之前的录音
-        setMeetingFiles((prev) => [
-          ...prev,
-          newRecording,
-        ]);
+        // 录音完成后加入文件列表，支持多段录音，不覆盖旧录音
+        setMeetingFiles((prev) => [...prev, newRecording]);
+        setAiStep('录音已加入文件列表，可点击 AI 解析为文本');
       };
 
-      // 每 1 秒生成一段录音数据
       recorder.start(1000);
 
       setIsRecording(true);
       setRecordTime(0);
+      setAiStep('正在录音，请完成后点击停止录音');
 
       timerRef.current = setInterval(() => {
         setRecordTime((prev) => prev + 1);
@@ -281,8 +256,6 @@ export default function Meetings() {
 
     clearRecordingTimer();
     setIsRecording(false);
-
-    // stop 会触发最后一次 dataavailable
     recorder.stop();
   };
 
@@ -297,7 +270,13 @@ export default function Meetings() {
         URL.revokeObjectURL(target.url);
       }
 
-      return prev.filter((item) => item.id !== id);
+      const next = prev.filter((item) => item.id !== id);
+
+      if (next.length === 0) {
+        setAiStep('等待录音或上传文件');
+      }
+
+      return next;
     });
   };
 
@@ -312,12 +291,13 @@ export default function Meetings() {
     });
 
     setMeetingFiles([]);
+    setAiStep('等待录音或上传文件');
   };
 
   // =========================
-  // 上传文件和录音，一起交给 AI 处理
+  // 录音 / 文件 -> 调用 AI API -> 解析为文本
   // =========================
-  const handleAiProcessFiles = async () => {
+  const handleAiTranscribe = async () => {
     if (meetingFiles.length === 0) {
       alert('请先上传文件或录制音频。');
       return;
@@ -325,6 +305,7 @@ export default function Meetings() {
 
     try {
       setLoading(true);
+      setAiStep('正在调用 AI API 解析录音/文件为文本...');
 
       const transcript = await transcribeMeetingFiles(meetingFiles);
 
@@ -333,28 +314,34 @@ export default function Meetings() {
         content: transcript,
       }));
 
-      alert('AI处理完成，已自动填入会议纪要。');
+      setAiStep('AI 已解析为文本，请检查会议纪要后生成 JSON 任务草稿');
+      alert('AI解析完成，文本已自动填入会议纪要。');
     } catch (error) {
       console.error(error);
-      alert(error.message || 'AI处理文件失败');
+      setAiStep('AI解析失败，请检查后端接口或重新上传文件');
+      alert(error.message || 'AI解析文件失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const validate = () => {
-    if (!form.title.trim()) {
+  const validateMeeting = () => {
+    const title = form.title.trim();
+    const date = form.date?.trim?.() || form.date;
+    const content = form.content.trim();
+
+    if (!title) {
       alert('请输入会议标题。');
       return false;
     }
 
-    if (!form.date) {
+    if (!date) {
       alert('请选择会议日期。');
       return false;
     }
 
-    if (!form.content.trim()) {
-      alert('请先输入会议纪要，或上传文件/录音后让 AI 生成会议纪要。');
+    if (!content) {
+      alert('请先输入会议纪要，或上传文件/录音后让 AI 解析为文本。');
       return false;
     }
 
@@ -362,7 +349,7 @@ export default function Meetings() {
   };
 
   const saveMeeting = async () => {
-    if (!validate()) return;
+    if (!validateMeeting()) return;
 
     try {
       setLoading(true);
@@ -370,6 +357,7 @@ export default function Meetings() {
       await createMeeting({
         title: form.title.trim(),
         date: form.date,
+        meetingDate: form.date,
         content: form.content.trim(),
       });
 
@@ -383,25 +371,34 @@ export default function Meetings() {
     }
   };
 
-  const extract = async () => {
-    if (!validate()) return;
+  // =========================
+  // 在提示词下调用 AI 生成每个人的 JSON 草稿
+  // =========================
+  const generateJsonDrafts = async () => {
+    if (!validateMeeting()) return;
 
     try {
       setLoading(true);
+      setAiStep('正在保存会议纪要...');
 
-      // 真实后端一般需要先保存会议，再用 meetingId 提取任务
+      // 先把文本保存成会议记录，后端用 meetingId 找到文本并生成草稿
       const savedMeeting = await createMeeting({
         title: form.title.trim(),
         date: form.date,
+        meetingDate: form.date,
         content: form.content.trim(),
       });
 
+      setAiStep('正在调用 AI 生成每个人的 JSON 任务草稿...');
+
       await extractTasks(savedMeeting.id);
 
+      setAiStep('JSON任务草稿已生成，等待管理员审核');
       navigate('/ai-tasks');
     } catch (error) {
       console.error(error);
-      alert(error.message || 'AI提取任务失败');
+      setAiStep('生成 JSON 任务草稿失败');
+      alert(error.message || 'AI生成JSON任务草稿失败');
     } finally {
       setLoading(false);
     }
@@ -413,8 +410,7 @@ export default function Meetings() {
         <div>
           <h1>会议纪要</h1>
           <p>
-            上传会议文件或录制会议音频，由 AI 处理后生成会议纪要，
-            并继续提取任务。
+            录音或上传文件后，先调用 AI API 解析为文本，再基于会议纪要生成每个人的 JSON 任务草稿。
           </p>
         </div>
       </div>
@@ -427,9 +423,7 @@ export default function Meetings() {
               type="text"
               placeholder="例如：课程项目第3次小组会议"
               value={form.title}
-              onChange={(e) =>
-                updateForm('title', e.target.value)
-              }
+              onChange={(e) => updateForm('title', e.target.value)}
             />
           </label>
 
@@ -438,28 +432,33 @@ export default function Meetings() {
             <input
               type="date"
               value={form.date}
-              onChange={(e) =>
-                updateForm('date', e.target.value)
-              }
+              onChange={(e) => updateForm('date', e.target.value)}
             />
           </label>
+        </div>
+
+        <div className="ai-flow-box">
+          <div className="ai-flow-title">当前流程</div>
+          <div className="ai-flow-steps">
+            <span>1. 录音/上传</span>
+            <span>2. AI解析文本</span>
+            <span>3. AI生成JSON草稿</span>
+            <span>4. 管理员审核</span>
+            <span>5. 分发给组员</span>
+          </div>
+          <p>{aiStep}</p>
         </div>
 
         <div className="content-card nested-card">
           <div className="section-title">
             <h2>会议文件与录音</h2>
-            <p>
-              支持多个文件和多段录音，后续会一起交给 AI 处理。
-            </p>
+            <p>支持多个文件和多段录音，文件会统一交给 AI 处理。</p>
           </div>
 
           <div className="upload-record-grid">
             <div className="upload-box">
               <h3>上传会议文件</h3>
-
-              <p className="muted">
-                可以上传会议文档、文本、PDF 或已有音频文件。
-              </p>
+              <p className="muted">可以上传会议文档、文本、PDF 或已有音频文件。</p>
 
               <input
                 type="file"
@@ -471,22 +470,11 @@ export default function Meetings() {
 
             <div className="record-box">
               <h3>会议录音</h3>
-
-              <p className="muted">
-                可以直接用电脑麦克风录制，多次录音会分别加入文件列表。
-              </p>
+              <p className="muted">可以直接用电脑麦克风录制，多次录音会分别加入文件列表。</p>
 
               <div className="record-status-line">
-                <span
-                  className={
-                    isRecording
-                      ? 'record-status recording'
-                      : 'record-status'
-                  }
-                >
-                  {isRecording
-                    ? `正在录音 ${formatTime(recordTime)}`
-                    : '未录音'}
+                <span className={isRecording ? 'record-status recording' : 'record-status'}>
+                  {isRecording ? `正在录音 ${formatTime(recordTime)}` : '未录音'}
                 </span>
               </div>
 
@@ -501,11 +489,7 @@ export default function Meetings() {
                     开始录音
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    className="btn danger"
-                    onClick={stopRecording}
-                  >
+                  <button type="button" className="btn danger" onClick={stopRecording}>
                     停止录音
                   </button>
                 )}
@@ -530,9 +514,7 @@ export default function Meetings() {
             </div>
 
             {meetingFiles.length === 0 ? (
-              <div className="empty-state small">
-                暂无上传文件或录音文件
-              </div>
+              <div className="empty-state small">暂无上传文件或录音文件</div>
             ) : (
               meetingFiles.map((item, index) => (
                 <div className="file-item" key={item.id}>
@@ -542,30 +524,20 @@ export default function Meetings() {
                     </strong>
 
                     <span>
-                      {item.type === 'recording'
-                        ? '录音文件'
-                        : '上传文件'}
-                      {' · '}
+                      {item.type === 'recording' ? '录音文件' : '上传文件'} ·{' '}
                       {(item.file.size / 1024).toFixed(1)} KB
                     </span>
                   </div>
 
                   <div className="file-actions">
-                    {item.file.type.startsWith('audio/') &&
-                      item.url && (
-                        <audio
-                          src={item.url}
-                          controls
-                          preload="metadata"
-                        />
-                      )}
+                    {item.file.type.startsWith('audio/') && item.url && (
+                      <audio src={item.url} controls preload="metadata" />
+                    )}
 
                     <button
                       type="button"
                       className="btn danger small"
-                      onClick={() =>
-                        removeMeetingFile(item.id)
-                      }
+                      onClick={() => removeMeetingFile(item.id)}
                       disabled={loading}
                     >
                       删除
@@ -580,23 +552,21 @@ export default function Meetings() {
             <button
               type="button"
               className="btn primary"
-              onClick={handleAiProcessFiles}
+              onClick={handleAiTranscribe}
               disabled={loading || meetingFiles.length === 0}
             >
-              {loading ? 'AI处理中...' : 'AI处理文件/录音'}
+              {loading ? 'AI解析中...' : 'AI解析为文本'}
             </button>
           </div>
         </div>
 
         <label className="form-group">
-          会议纪要
+          会议纪要文本
           <textarea
             rows="12"
-            placeholder="可以手动输入会议纪要，也可以上传文件或录音后点击“AI处理文件/录音”。"
+            placeholder="可以手动输入会议纪要，也可以录音/上传文件后点击“AI解析为文本”。"
             value={form.content}
-            onChange={(e) =>
-              updateForm('content', e.target.value)
-            }
+            onChange={(e) => updateForm('content', e.target.value)}
           />
         </label>
 
@@ -613,10 +583,10 @@ export default function Meetings() {
           <button
             type="button"
             className="btn primary"
-            onClick={extract}
+            onClick={generateJsonDrafts}
             disabled={loading}
           >
-            AI提取任务
+            生成JSON任务草稿
           </button>
         </div>
       </div>
@@ -631,16 +601,13 @@ export default function Meetings() {
         ) : (
           <div className="meeting-list">
             {meetings.map((meeting) => (
-              <div
-                className="meeting-item"
-                key={meeting.id}
-              >
+              <div className="meeting-item" key={meeting.id}>
                 <div>
                   <h3>{meeting.title}</h3>
                   <p>{meeting.content}</p>
                 </div>
 
-                <span>{meeting.date}</span>
+                <span>{meeting.date || meeting.meetingDate}</span>
               </div>
             ))}
           </div>
