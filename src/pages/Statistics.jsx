@@ -31,7 +31,7 @@ export default function Statistics({ currentUser }) {
   return (
     <div>
       <div className="page-header"><div><h1>数据统计</h1><p>查看团队任务完成情况、成员负载与任务状态分布。</p></div></div>
-      {currentUser?.role !== 'leader' && <div className="permission-banner">普通组员当前可查看基础团队统计数据；管理型统计操作仅面向组长。</div>}
+      {currentUser?.role !== 'leader' && <div className="permission-banner">{currentUser?.role === 'teacher' ? '教师/助教可查看团队统计，但不能修改业务数据。' : '普通组员可查看基础团队统计；管理操作仅面向组长。'}</div>}
       <div className="stats-grid"><StatCard title="团队任务总数" value={data.total} /><StatCard title="已完成任务" value={data.completed} /><StatCard title="未完成任务" value={data.unfinished} /><StatCard title="已逾期任务" value={data.overdue} /><StatCard title="整体完成率" value={`${data.completionRate}%`} /></div>
       <div className="chart-grid">
         <section className="panel chart-panel"><h2>成员任务数量</h2><Bar data={barData} options={{ responsive: true, maintainAspectRatio: false }} /></section>
@@ -40,3 +40,4 @@ export default function Statistics({ currentUser }) {
     </div>
   );
 }
+

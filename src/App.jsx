@@ -7,12 +7,11 @@ import AITasks from './pages/AITasks';
 import TaskBoard from './pages/TaskBoard';
 import MyTasks from './pages/MyTasks';
 import Statistics from './pages/Statistics';
+import Records from './pages/Records';
 
 function getCurrentUser() {
   try {
-    const token = localStorage.getItem('authToken');
-    const user = JSON.parse(localStorage.getItem('currentUser'));
-    return token && user ? user : null;
+    return JSON.parse(localStorage.getItem('currentUser'));
   } catch {
     return null;
   }
@@ -21,7 +20,6 @@ function getCurrentUser() {
 function ProtectedRoute() {
   const currentUser = getCurrentUser();
   if (!currentUser) return <Navigate to="/login" replace />;
-
   return (
     <div className="app-shell">
       <Navbar currentUser={currentUser} />
@@ -30,11 +28,12 @@ function ProtectedRoute() {
   );
 }
 
-function MeetingsRoute() { return <Meetings />; }
+function MeetingsRoute() { return <Meetings currentUser={getCurrentUser()} />; }
 function AITasksRoute() { return <AITasks currentUser={getCurrentUser()} />; }
 function TaskBoardRoute() { return <TaskBoard currentUser={getCurrentUser()} />; }
 function MyTasksRoute() { return <MyTasks currentUser={getCurrentUser()} />; }
 function StatisticsRoute() { return <Statistics currentUser={getCurrentUser()} />; }
+function RecordsRoute() { return <Records currentUser={getCurrentUser()} />; }
 
 export default function App() {
   return (
@@ -47,6 +46,7 @@ export default function App() {
         <Route path="/tasks" element={<TaskBoardRoute />} />
         <Route path="/my-tasks" element={<MyTasksRoute />} />
         <Route path="/statistics" element={<StatisticsRoute />} />
+        <Route path="/records" element={<RecordsRoute />} />
       </Route>
       <Route path="/" element={<Navigate to={getCurrentUser() ? '/meetings' : '/login'} replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

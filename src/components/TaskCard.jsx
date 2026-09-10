@@ -6,11 +6,12 @@ export default function TaskCard({ task, onClick }) {
     <button className="task-card" onClick={() => onClick(task)}>
       <div className="task-card-header">
         <strong>{task.title}</strong>
-        <span className={`tag priority-${priorityClass[task.priority] || 'unspecified'}`}>{task.priority}</span>
+        <span className={`tag priority-${priorityClass[task.priority]}`}>{task.priority}</span>
       </div>
-      <p>负责人：{task.assignee || '待分配'}</p>
-      <p>截止日期：{task.deadline || '未设置'}</p>
-      <span className={`tag status-${statusClass[task.status] || 'todo'}`}>{task.status}</span>
+      <p>负责人：{task.assignee}</p>
+      <p>截止日期：{task.deadline}</p>
+      <span className={`tag status-${statusClass[task.status]}`}>{task.status}</span>
     </button>
   );
 }
+

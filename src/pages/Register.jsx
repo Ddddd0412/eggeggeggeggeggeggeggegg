@@ -5,42 +5,21 @@ import RoleBadge from '../components/RoleBadge';
 
 export default function Register() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    teamName: '',
-    role: 'member',
-  });
+  const [form, setForm] = useState({ username: '', email: '', password: '', confirmPassword: '', teamName: '', role: 'member' });
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
-    setError('');
-
     if (form.password !== form.confirmPassword) {
       setError('两次输入的密码不一致');
       return;
     }
-
-    setLoading(true);
     try {
-      // confirmPassword 只用于前端校验，不发送给后端。
-      await register({
-        username: form.username,
-        email: form.email,
-        password: form.password,
-        teamName: form.teamName,
-        role: form.role,
-      });
+      await register(form);
       alert('注册成功，请登录');
       navigate('/login');
     } catch (err) {
-      setError(err.message || '注册失败');
-    } finally {
-      setLoading(false);
+      setError(err.message);
     }
   };
 
@@ -55,9 +34,7 @@ export default function Register() {
           <label>密码<input type="password" required minLength="6" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></label>
           <label>确认密码<input type="password" required value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} /></label>
         </div>
-
         <label>团队名称<input required value={form.teamName} onChange={(e) => setForm({ ...form, teamName: e.target.value })} /></label>
-
         <div className="field-title">用户角色</div>
         <div className="role-options">
           <label className={`role-card ${form.role === 'leader' ? 'selected' : ''}`}>
@@ -66,14 +43,15 @@ export default function Register() {
           </label>
           <label className={`role-card ${form.role === 'member' ? 'selected' : ''}`}>
             <input type="radio" name="role" value="member" checked={form.role === 'member'} onChange={(e) => setForm({ ...form, role: e.target.value })} />
-            <div><RoleBadge role="member" /><strong>加入并参与协作</strong><span>普通组员填写已有团队名称即可加入团队。</span></div>
+            <div><RoleBadge role="member" /><strong>加入并参与协作</strong><span>可查看团队任务、管理自己的任务状态并查看基础统计。</span></div>
           </label>
         </div>
-
         {error && <div className="error-tip">{error}</div>}
-        <button type="submit" className="btn primary full" disabled={loading}>{loading ? '注册中...' : '注册'}</button>
+        <button className="btn primary full">注册</button>
         <div className="auth-footer">已有账号？<Link to="/login">返回登录</Link></div>
       </form>
     </div>
   );
 }
+
+
