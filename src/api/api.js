@@ -8,19 +8,15 @@ function clearSession() {
   localStorage.removeItem(USER_KEY);
 }
 
-// 所有真实后端请求统一从这里发送
+// 所有普通 JSON 请求统一从这里发送
 async function request(path, options = {}) {
   const token = localStorage.getItem(TOKEN_KEY);
 
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body
-        ? { 'Content-Type': 'application/json' }
-        : {}),
-      ...(token
-        ? { Authorization: `Bearer ${token}` }
-        : {}),
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -33,18 +29,22 @@ async function request(path, options = {}) {
     throw new Error('服务器返回数据格式错误');
   }
 
-  if (!response.ok || !result.success) {
+  if (!response.ok || result.success === false) {
     if (response.status === 401) {
       clearSession();
     }
 
     throw new Error(
       result?.error?.message ||
-      `请求失败：${response.status}`
+        result?.error ||
+        `请求失败：${response.status}`
     );
   }
 
-  return result.data;
+  // 兼容两种后端返回：
+  // 1. { success: true, data: ... }
+  // 2. 直接返回数据
+  return result.data ?? result;
 }
 
 
@@ -58,7 +58,7 @@ export async function register(data) {
     body: JSON.stringify(data),
   });
 
-  return result.user;
+  return result.user ?? result;
 }
 
 export async function login(data) {
@@ -67,17 +67,15 @@ export async function login(data) {
     body: JSON.stringify(data),
   });
 
-  localStorage.setItem(
-    TOKEN_KEY,
-    result.token
-  );
+  if (result.token) {
+    localStorage.setItem(TOKEN_KEY, result.token);
+  }
 
-  localStorage.setItem(
-    USER_KEY,
-    JSON.stringify(result.user)
-  );
+  const user = result.user ?? result;
 
-  return result.user;
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+
+  return user;
 }
 
 export async function logout() {
@@ -91,7 +89,16 @@ export async function logout() {
 }
 
 export async function getCurrentUser() {
-  return request('/api/auth/me');
+  const cachedUser = localStorage.getItem(USER_KEY);
+
+  try {
+    const result = await request('/api/auth/me');
+    const user = result.user ?? result;
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    return user;
+  } catch {
+    return cachedUser ? JSON.parse(cachedUser) : null;
+  }
 }
 
 
@@ -119,8 +126,6 @@ export async function createMeeting(meeting) {
   });
 }
 
-// 修改已保存的会议纪要
-// 如果后端最终使用 PUT，请把 PATCH 改成 PUT
 export async function updateMeeting(id, meeting) {
   return request(`/api/meetings/${id}`, {
     method: 'PATCH',
@@ -130,89 +135,91 @@ export async function updateMeeting(id, meeting) {
 
 
 // ====================
-// 语音转文字
+// 文件 / 录音交给 AI 处理
 // ====================
 
-// 上传浏览器录音到 AI 语音转写接口
-// FormData 请求不能手动设置 Content-Type
-// 浏览器会自动添加 multipart boundary
-export async function transcribeRecording(audioBlob) {
-  if (!audioBlob) {
-    throw new Error('没有可上传的录音');
+// 上传多个会议文件和录音文件给 AI 处理。
+// 注意：FormData 请求不要手动设置 Content-Type。
+// 浏览器会自动生成 multipart/form-data 的 boundary。
+// 前端统一使用字段名 files。
+// 后端需要支持：upload.array('files') 或同等逻辑。
+export async function transcribeMeetingFiles(files) {
+  if (!files || files.length === 0) {
+    throw new Error('请先上传文件或录制音频');
   }
 
   const token = localStorage.getItem(TOKEN_KEY);
-
   const formData = new FormData();
 
-  // 根据浏览器产生的音频格式决定扩展名
-  let extension = 'webm';
+  files.forEach((item) => {
+    formData.append('files', item.file, item.name);
+  });
 
-  if (audioBlob.type.includes('ogg')) {
-    extension = 'ogg';
-  }
-
-  if (audioBlob.type.includes('mp4')) {
-    extension = 'm4a';
-  }
-
-  if (audioBlob.type.includes('mpeg')) {
-    extension = 'mp3';
-  }
-
-  if (audioBlob.type.includes('wav')) {
-    extension = 'wav';
-  }
-
-  formData.append(
-    'audio',
-    audioBlob,
-    `meeting-recording.${extension}`
-  );
-
-  const response = await fetch(
-    '/api/meetings/transcribe',
-    {
-      method: 'POST',
-
-      // 如果已经登录，把 token 一起发给后端
-      headers: token
-        ? {
-            Authorization: `Bearer ${token}`,
-          }
-        : {},
-
-      body: formData,
-    }
-  );
+  const response = await fetch('/api/meetings/transcribe', {
+    method: 'POST',
+    headers: token
+      ? {
+          Authorization: `Bearer ${token}`,
+        }
+      : {},
+    body: formData,
+  });
 
   let result;
 
   try {
     result = await response.json();
   } catch {
-    throw new Error(
-      '语音转写服务返回数据格式错误'
-    );
+    throw new Error('AI处理结果格式错误');
   }
 
-  if (!response.ok) {
+  if (!response.ok || result.success === false) {
     throw new Error(
       result?.error?.message ||
-      result?.error ||
-      `语音转写失败：${response.status}`
+        result?.error ||
+        `AI处理失败：${response.status}`
     );
   }
 
-  // AI 接口应该返回：
-  // {
-  //   transcript: "识别出来的会议内容"
-  // }
-  if (!result.transcript) {
-    throw new Error('语音转写结果为空');
+  const data = result.data ?? result;
+
+  // 兼容不同后端返回字段
+  // 推荐后端返回：{ transcript: "..." }
+  const transcript =
+    data.transcript ||
+    data.text ||
+    data.content ||
+    '';
+
+  if (!transcript) {
+    throw new Error('AI处理结果为空');
   }
 
-  return result.transcript;
+  return transcript;
+}
+
+// 保留单个录音上传函数，方便其他旧代码继续调用
+export async function transcribeRecording(audioBlob) {
+  if (!audioBlob) {
+    throw new Error('没有可上传的录音');
+  }
+
+  const file = new File(
+    [audioBlob],
+    `meeting-recording-${Date.now()}.webm`,
+    {
+      type: audioBlob.type || 'audio/webm',
+    }
+  );
+
+  return transcribeMeetingFiles([
+    {
+      id: `${Date.now()}-recording`,
+      name: file.name,
+      type: 'recording',
+      file,
+    },
+  ]);
 }
 
 
@@ -226,63 +233,39 @@ export async function extractTasks(meeting) {
       ? meeting.id
       : meeting;
 
-  const result = await request(
-    '/api/ai/extract',
-    {
-      method: 'POST',
+  const result = await request('/api/ai/extract', {
+    method: 'POST',
+    body: JSON.stringify({
+      meetingId,
+    }),
+  });
 
-      body: JSON.stringify({
-        meetingId,
-      }),
-    }
-  );
-
-  // 记录最后一次进行 AI 提取的会议
-  // AITasks 页面可以根据 meetingId 加载对应草稿
   localStorage.setItem(
     LAST_MEETING_KEY,
     String(meetingId)
   );
 
-  return result.drafts;
+  return result.drafts ?? result;
 }
 
 export async function getDraftTasks() {
-  const meetingId =
-    localStorage.getItem(
-      LAST_MEETING_KEY
-    );
+  const meetingId = localStorage.getItem(LAST_MEETING_KEY);
+  const query = meetingId ? `?meetingId=${meetingId}` : '';
 
-  const query = meetingId
-    ? `?meetingId=${meetingId}`
-    : '';
-
-  return request(
-    `/api/ai/drafts${query}`
-  );
+  return request(`/api/ai/drafts${query}`);
 }
 
-export async function updateDraft(
-  id,
-  updates
-) {
-  return request(
-    `/api/ai/drafts/${id}`,
-    {
-      method: 'PATCH',
-
-      body: JSON.stringify(updates),
-    }
-  );
+export async function updateDraft(id, updates) {
+  return request(`/api/ai/drafts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
 }
 
 export async function deleteDraft(id) {
-  return request(
-    `/api/ai/drafts/${id}`,
-    {
-      method: 'DELETE',
-    }
-  );
+  return request(`/api/ai/drafts/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 
@@ -291,8 +274,7 @@ export async function deleteDraft(id) {
 // ====================
 
 export async function confirmTask(task) {
-  // 先把用户在前端修改后的草稿
-  // 同步保存到后端数据库
+  // 先把前端修改后的草稿同步给后端
   await updateDraft(task.id, {
     title: task.title,
     assignee: task.assignee,
@@ -301,17 +283,13 @@ export async function confirmTask(task) {
     sourceText: task.sourceText,
   });
 
-  // 再把草稿正式确认成任务
-  return request(
-    '/api/tasks/confirm',
-    {
-      method: 'POST',
-
-      body: JSON.stringify({
-        draftId: task.id,
-      }),
-    }
-  );
+  // 再把草稿确认成正式任务
+  return request('/api/tasks/confirm', {
+    method: 'POST',
+    body: JSON.stringify({
+      draftId: task.id,
+    }),
+  });
 }
 
 
@@ -323,27 +301,17 @@ export async function getTasks() {
   return request('/api/tasks');
 }
 
-export async function updateTask(
-  id,
-  updates
-) {
-  return request(
-    `/api/tasks/${id}`,
-    {
-      method: 'PATCH',
-
-      body: JSON.stringify(updates),
-    }
-  );
+export async function updateTask(id, updates) {
+  return request(`/api/tasks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
 }
 
 export async function deleteTask(id) {
-  return request(
-    `/api/tasks/${id}`,
-    {
-      method: 'DELETE',
-    }
-  );
+  return request(`/api/tasks/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 
